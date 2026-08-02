@@ -38,7 +38,7 @@ export class ZonewallController extends MinigameController<ZonewallState> {
   private nextTargetIndex = 0;
   private flash = 0;
 
-  start(): void {
+  protected setup(): void {
     const safeCount = Math.round(this.num('safeZones', 4));
     const hostileCount = Math.round(this.num('hostileZones', 2));
     const safeWidth = this.num('safeWidth', 0.045);
@@ -68,12 +68,9 @@ export class ZonewallController extends MinigameController<ZonewallState> {
 
     this.nextTargetIndex = this.zones.findIndex((z) => z.kind === 'safe');
     this.bar = 0;
-    this.markRunning();
   }
 
-  tick(ctx: TickContext): void {
-    if (this.isOver()) return;
-    this.elapsed = ctx.elapsed;
+  protected onTick(ctx: TickContext): void {
     this.flash = Math.max(0, this.flash - ctx.dt);
 
     const speed = this.num('speed', 0.35) / 1000; // fração da trilha por ms
@@ -93,8 +90,7 @@ export class ZonewallController extends MinigameController<ZonewallState> {
     }
   }
 
-  handleInput(input: GameInput): void {
-    if (this.isOver()) return;
+  protected onInput(input: GameInput): void {
     const isAction = input.type === 'pointer' || input.code === 'Space' || input.code === 'Enter';
     if (!isAction) return;
 

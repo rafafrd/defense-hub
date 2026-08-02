@@ -41,7 +41,7 @@ export class MemDefragerController extends MinigameController<MemDefragerState> 
   private previewTimer = 0;
   private attemptsLeft = 3;
 
-  start(): void {
+  protected setup(): void {
     this.columns = Math.round(this.num('columns', 4));
     const rows = Math.round(this.num('rows', 4));
     const length = Math.round(this.num('sequenceLength', 5));
@@ -56,15 +56,10 @@ export class MemDefragerController extends MinigameController<MemDefragerState> 
     this.stage = 'preview';
     this.previewIndex = 0;
     this.previewTimer = 0;
-    this.markRunning();
   }
 
-  tick(ctx: TickContext): void {
-    if (this.isOver() || this.stage !== 'preview') {
-      this.elapsed = ctx.elapsed;
-      return;
-    }
-    this.elapsed = ctx.elapsed;
+  protected onTick(ctx: TickContext): void {
+    if (this.stage !== 'preview') return;
     const flashMs = this.num('flashMs', 520);
     this.previewTimer += ctx.dt;
 
@@ -81,8 +76,8 @@ export class MemDefragerController extends MinigameController<MemDefragerState> 
     this.highlighted = this.previewTimer < flashMs * 0.6 ? (this.sequence[this.previewIndex] ?? null) : null;
   }
 
-  handleInput(input: GameInput): void {
-    if (this.isOver() || this.stage !== 'input') return;
+  protected onInput(input: GameInput): void {
+    if (this.stage !== 'input') return;
     if (input.type !== 'pointer' || !input.targetId) return;
 
     const expected = this.sequence[this.entered.length];

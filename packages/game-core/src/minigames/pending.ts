@@ -33,15 +33,15 @@ export class PendingController extends MinigameController<PendingState> {
     this.spec = meta.spec;
   }
 
-  start(): void {
-    this.markRunning();
+  protected setup(): void {
+    /* sem mecânica implementada */
   }
 
-  tick(ctx: TickContext): void {
-    this.elapsed = ctx.elapsed;
+  protected onTick(_ctx: TickContext): void {
+    /* sem mecânica implementada */
   }
 
-  handleInput(_input: GameInput): void {
+  protected onInput(_input: GameInput): void {
     /* sem mecânica implementada */
   }
 

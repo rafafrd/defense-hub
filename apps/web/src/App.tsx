@@ -3,6 +3,7 @@ import {
   playableMinigames,
   randomSeed,
   Rng,
+  type DifficultyLevel,
   type MinigameId,
   type RunResult,
 } from '@hub/game-core';
@@ -25,6 +26,8 @@ type Screen =
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ kind: 'menu' });
   const [bestStreak, setBestStreak] = useState<number | null>(null);
+  // Nível escolhido no menu; persiste enquanto o app estiver aberto, inclusive entre partidas da Sobrevivência.
+  const [level, setLevel] = useState<DifficultyLevel>(3);
 
   const startGame = useCallback((id: MinigameId, mode: Mode, streak = 0) => {
     setScreen({ kind: 'playing', id, seed: randomSeed(), mode, streak });
@@ -69,6 +72,7 @@ export default function App() {
         key={`${screen.id}-${screen.seed}`}
         id={screen.id}
         seed={screen.seed}
+        level={level}
         mode={screen.mode}
         streak={screen.streak}
         onResolved={handleResolved}
@@ -94,6 +98,8 @@ export default function App() {
   return (
     <MainMenu
       bestStreak={bestStreak}
+      level={level}
+      onLevelChange={setLevel}
       onLaunch={(id) => startGame(id, 'solo')}
       onSurvival={startSurvival}
     />

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   GameLoop,
   createMinigame,
+  type DifficultyLevel,
   type DifficultyParams,
   type GameInput,
   type GameInputPayload,
@@ -15,6 +16,7 @@ import { playFeedback } from './audio.js';
 interface SessionOptions {
   id: MinigameId;
   seed: number;
+  level: DifficultyLevel;
   difficulty?: DifficultyParams;
   onResolved: (result: RunResult) => void;
 }
@@ -24,10 +26,10 @@ interface SessionOptions {
  * O snapshot para o DOM é atualizado em cadência reduzida; os renderers em
  * canvas leem o controller direto no rAF, sem passar por estado do React.
  */
-export function useMinigameSession({ id, seed, difficulty, onResolved }: SessionOptions) {
+export function useMinigameSession({ id, seed, level, difficulty, onResolved }: SessionOptions) {
   const controller = useMemo<MinigameController<unknown>>(
-    () => createMinigame(id, seed, difficulty),
-    [id, seed, difficulty],
+    () => createMinigame(id, seed, level, difficulty),
+    [id, seed, level, difficulty],
   );
 
   const [snapshot, setSnapshot] = useState<Snapshot<unknown>>(() => controller.snapshot());

@@ -3,6 +3,7 @@
  * Nada aqui importa DOM, React ou Canvas: o pacote é framework-agnostic para que
  * a regra de negócio de cada minigame seja testável em Node puro.
  */
+import type { DifficultyLevel } from './difficulty.js';
 
 export type MinigameId =
   | 'zonewall'
@@ -17,7 +18,7 @@ export type MinigameId =
 /** Como a camada de apresentação desenha o minigame. */
 export type RendererKind = 'canvas' | 'dom';
 
-export type Phase = 'idle' | 'running' | 'blocked' | 'breached';
+export type Phase = 'idle' | 'arming' | 'running' | 'blocked' | 'breached';
 
 /** Resultado binário exigido pelo GDD: ataque bloqueado ou sistema invadido. */
 export type Outcome = 'blocked' | 'breached';
@@ -65,6 +66,7 @@ export interface MinigameConfig {
   /** Semente da run: mesma seed reproduz o mesmo desafio (replay e validação). */
   seed: number;
   difficulty: DifficultyParams;
+  level: DifficultyLevel;
 }
 
 /** Estado público lido pelo renderer a cada frame. */
@@ -75,6 +77,8 @@ export interface Snapshot<TState> {
   /** 0..1 da saúde da conexão; zero significa invasão. */
   integrity: number;
   elapsed: number;
+  /** ms restantes da contagem regressiva de arming; 0 fora dela. */
+  armingMsLeft: number;
   state: TState;
 }
 

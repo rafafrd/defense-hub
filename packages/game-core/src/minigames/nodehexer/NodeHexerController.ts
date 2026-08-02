@@ -40,7 +40,7 @@ export class NodeHexerController extends MinigameController<NodeHexerState> {
   private path: string[] = [];
   private lastInvalidId: string | null = null;
 
-  start(): void {
+  protected setup(): void {
     this.width = Math.round(this.num('width', 5));
     this.height = Math.round(this.num('height', 5));
     const targetCount = Math.round(this.num('targets', 4));
@@ -65,19 +65,16 @@ export class NodeHexerController extends MinigameController<NodeHexerState> {
     for (const node of this.rng.shuffle(candidates).slice(0, targetCount)) node.isTarget = true;
 
     this.path = [this.startId];
-    this.markRunning();
   }
 
-  tick(ctx: TickContext): void {
-    this.elapsed = ctx.elapsed;
+  protected onTick(ctx: TickContext): void {
     const limit = this.num('timeLimitMs', 45_000);
-    if (!this.isOver() && limit > 0 && ctx.elapsed >= limit) {
+    if (limit > 0 && ctx.elapsed >= limit) {
       this.resolve('breached', 'Tempo esgotado no traçado');
     }
   }
 
-  handleInput(input: GameInput): void {
-    if (this.isOver()) return;
+  protected onInput(input: GameInput): void {
     if (input.type !== 'pointer' || !input.targetId) return;
 
     const node = this.nodes.find((n) => n.id === input.targetId);
