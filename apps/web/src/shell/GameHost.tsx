@@ -13,6 +13,8 @@ interface GameHostProps {
   difficulty?: DifficultyParams;
   mode: 'solo' | 'survival';
   streak: number;
+  /** IDs elegíveis para encadeamento em caso de invasão (ex.: Zonewall no modo Sobrevivência). */
+  chainPool?: MinigameId[];
   onResolved: (result: RunResult) => void;
   onAbort: () => void;
 }
@@ -21,13 +23,14 @@ interface GameHostProps {
  * Casca de partida: HUD, penalidade visual e o renderer do minigame. Não conhece
  * a mecânica de nenhum jogo — só o contrato do controller.
  */
-export function GameHost({ id, seed, level, difficulty, mode, streak, onResolved, onAbort }: GameHostProps) {
+export function GameHost({ id, seed, level, difficulty, mode, streak, chainPool, onResolved, onAbort }: GameHostProps) {
   const entry = getMinigame(id);
   const { controller, snapshot, sendInput, shakeKey } = useMinigameSession({
     id,
     seed,
     level,
     difficulty,
+    chainPool,
     onResolved,
   });
   const Renderer = rendererFor(id);
@@ -71,7 +74,7 @@ export function GameHost({ id, seed, level, difficulty, mode, streak, onResolved
         <div className="min-w-0 flex-1">
           <div key={shakeKey} className="scanlines relative animate-shake">
             {arming && <ArmingOverlay entry={entry} level={level} armingMsLeft={snapshot.armingMsLeft} />}
-            <Renderer controller={controller} snapshot={snapshot} sendInput={sendInput} />
+            <Renderer controller={controller} snapshot={snapshot} sendInput={sendInput} level={level} />
           </div>
           {showHelp && !arming && <InputHint entry={entry} snapshot={snapshot} />}
         </div>

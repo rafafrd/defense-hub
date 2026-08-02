@@ -15,7 +15,15 @@ type Mode = 'solo' | 'survival';
 
 type Screen =
   | { kind: 'menu' }
-  | { kind: 'playing'; id: MinigameId; seed: number; mode: Mode; streak: number }
+  | {
+      kind: 'playing';
+      id: MinigameId;
+      seed: number;
+      mode: Mode;
+      streak: number;
+      /** Nível desta rotina específica; usado só quando o Zonewall encadeia num hack secundário +1. */
+      levelOverride?: DifficultyLevel;
+    }
   | { kind: 'result'; result: RunResult; mode: Mode; streak: number };
 
 /**
@@ -52,10 +60,23 @@ export default function App() {
           return { kind: 'playing', id: next.id, seed: randomSeed(), mode: 'survival', streak };
         }
 
+        // No Zonewall, uma invasão pode encadear um hack secundário em nível +1
+        // em vez de encerrar a sessão de Sobrevivência.
+        if (current.mode === 'survival' && result.outcome === 'breached' && result.chainTo) {
+          return {
+            kind: 'playing',
+            id: result.chainTo,
+            seed: randomSeed(),
+            mode: 'survival',
+            streak: current.streak,
+            levelOverride: Math.min(5, level + 1) as DifficultyLevel,
+          };
+        }
+
         return { kind: 'result', result, mode: current.mode, streak: current.streak };
       });
     },
-    [],
+    [level],
   );
 
   useEffect(() => {
@@ -67,14 +88,22 @@ export default function App() {
   }, []);
 
   if (screen.kind === 'playing') {
+    // No modo Sobrevivência, qualquer rotina pode encadear para outra em caso de
+    // invasão (hoje só o Zonewall usa isso) — o pool nunca inclui a rotina atual.
+    const chainPool =
+      screen.mode === 'survival'
+        ? playableMinigames().filter((m) => m.id !== screen.id).map((m) => m.id)
+        : undefined;
+
     return (
       <GameHost
         key={`${screen.id}-${screen.seed}`}
         id={screen.id}
         seed={screen.seed}
-        level={level}
+        level={screen.levelOverride ?? level}
         mode={screen.mode}
         streak={screen.streak}
+        chainPool={chainPool}
         onResolved={handleResolved}
         onAbort={() => setScreen({ kind: 'menu' })}
       />

@@ -67,6 +67,8 @@ export interface MinigameConfig {
   seed: number;
   difficulty: DifficultyParams;
   level: DifficultyLevel;
+  /** IDs elegíveis para encadeamento em caso de invasão (ex.: Zonewall no modo Sobrevivência). */
+  chainPool?: MinigameId[];
 }
 
 /** Estado público lido pelo renderer a cada frame. */
@@ -89,4 +91,6 @@ export interface RunResult {
   durationMs: number;
   seed: number;
   reason?: string;
+  /** Se a invasão encadeia num hack secundário (ex.: Zonewall no modo Sobrevivência), o próximo minigame. */
+  chainTo?: MinigameId;
 }

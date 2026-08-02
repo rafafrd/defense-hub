@@ -18,6 +18,8 @@ interface SessionOptions {
   seed: number;
   level: DifficultyLevel;
   difficulty?: DifficultyParams;
+  /** IDs elegíveis para encadeamento em caso de invasão (ex.: Zonewall no modo Sobrevivência). */
+  chainPool?: MinigameId[];
   onResolved: (result: RunResult) => void;
 }
 
@@ -26,10 +28,10 @@ interface SessionOptions {
  * O snapshot para o DOM é atualizado em cadência reduzida; os renderers em
  * canvas leem o controller direto no rAF, sem passar por estado do React.
  */
-export function useMinigameSession({ id, seed, level, difficulty, onResolved }: SessionOptions) {
+export function useMinigameSession({ id, seed, level, difficulty, chainPool, onResolved }: SessionOptions) {
   const controller = useMemo<MinigameController<unknown>>(
-    () => createMinigame(id, seed, level, difficulty),
-    [id, seed, level, difficulty],
+    () => createMinigame(id, seed, level, difficulty, chainPool),
+    [id, seed, level, difficulty, chainPool],
   );
 
   const [snapshot, setSnapshot] = useState<Snapshot<unknown>>(() => controller.snapshot());

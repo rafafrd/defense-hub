@@ -7,7 +7,7 @@ export type { LoopOptions } from './engine/GameLoop.js';
 export * from './registry.js';
 
 export { ZonewallController } from './minigames/zonewall/ZonewallController.js';
-export type { ZonewallState, Zone, ZoneKind } from './minigames/zonewall/ZonewallController.js';
+export type { ZonewallState, ZoneRow, RowOutcome } from './minigames/zonewall/ZonewallController.js';
 export { MemDefragerController } from './minigames/memdefrager/MemDefragerController.js';
 export type { MemDefragerState, MemCell } from './minigames/memdefrager/MemDefragerController.js';
 export { NodeHexerController } from './minigames/nodehexer/NodeHexerController.js';

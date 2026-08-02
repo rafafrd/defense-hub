@@ -1,92 +1,125 @@
 import { MinigameController } from '../../engine/MinigameController.js';
-import type { GameInput, MinigameId, RendererKind, TickContext } from '../../engine/types.js';
+import type {
+  GameInput, MinigameId, Outcome, RendererKind, RunResult, TickContext,
+} from '../../engine/types.js';
 
-export type ZoneKind = 'safe' | 'hostile';
+export type RowOutcome = 'pending' | 'hit' | 'miss';
 
-export interface Zone {
+export interface ZoneRow {
   id: string;
-  /** Posição normalizada 0..1 na trilha. */
-  start: number;
-  end: number;
-  kind: ZoneKind;
-  hit: boolean;
+  /** Zona-alvo desta linha, normalizada 0..1 na trilha própria da linha. */
+  zoneStart: number;
+  zoneEnd: number;
+  outcome: RowOutcome;
+  /** Sentido atual da varredura: 1 avança, -1 recua. Só inverte no nível 5. */
+  direction: 1 | -1;
+  /** Ponto 0..1 em que a barra inverte de direção uma única vez; ausente fora do nível 5. */
+  reverseAt?: number;
+  reversed: boolean;
 }
 
 export interface ZonewallState {
-  /** Posição atual da barra móvel, 0..1. */
+  rows: ZoneRow[];
+  /** Índice da linha atualmente varrida; linhas antes dela já foram resolvidas. */
+  activeRowIndex: number;
+  /** Posição da barra na linha ativa, 0..1. */
   bar: number;
-  zones: Zone[];
-  /** Índice da próxima zona segura a ser bloqueada. */
-  nextTargetIndex: number;
-  /** Frames restantes de destaque após um acerto (usado pelo renderer). */
+  hits: number;
+  misses: number;
+  hitsNeeded: number;
+  /** Última linha resolvida, usada pelo renderer para o pulso de acerto/erro. */
+  lastResolvedIndex: number | null;
+  /** ms restantes de destaque de acerto. */
   flash: number;
+  /** ms restantes de destaque de erro (pisca vermelho). */
+  errorFlash: number;
 }
 
 /**
- * Zonewall — skill check de precisão.
- * A barra varre a trilha uma única vez. O jogador precisa acionar dentro de cada
- * zona verde na ordem; acionar dentro de uma zona vermelha derruba a conexão na
- * hora, e deixar uma zona verde passar conta como falha de bloqueio.
+ * Zonewall — skill check de precisão, replicando a mecânica real do WTTG2:
+ * a tela empilha várias linhas; a barra varre só a linha ativa (começando do
+ * topo) e o jogador aciona quando ela cruza a zona-alvo daquela linha.
+ * Acertando ou errando, o jogo sempre desce para a próxima linha — não há
+ * repetição. Acumular os acertos exigidos bloqueia a hack na hora (Insta Hack
+ * Block); acumular erros o bastante para tornar isso matematicamente
+ * impossível já resolve como invasão, sem esperar a última linha.
  */
 export class ZonewallController extends MinigameController<ZonewallState> {
   readonly id: MinigameId = 'zonewall';
   readonly renderer: RendererKind = 'canvas';
   readonly label = 'ZONEWALL';
 
+  private rows: ZoneRow[] = [];
+  private activeRowIndex = 0;
   private bar = 0;
-  private zones: Zone[] = [];
-  private nextTargetIndex = 0;
+  private hits = 0;
+  private misses = 0;
+  private hitsNeeded = 1;
+  private maxMisses = 1;
+  private speed = 0.65;
+  private accelPerRow = 0;
+  private lastResolvedIndex: number | null = null;
   private flash = 0;
+  private errorFlash = 0;
+  private chainTo?: MinigameId;
 
   protected setup(): void {
-    const safeCount = Math.round(this.num('safeZones', 4));
-    const hostileCount = Math.round(this.num('hostileZones', 2));
-    const safeWidth = this.num('safeWidth', 0.045);
-    const hostileWidth = this.num('hostileWidth', 0.06);
+    const rowCount = Math.max(1, Math.round(this.num('rows', 5)));
+    const zoneWidth = this.num('zoneWidth', 0.07);
+    const half = zoneWidth / 2;
+    const reverseOnce = this.flag('reverseOnce');
 
-    const total = safeCount + hostileCount;
-    const slot = 1 / (total + 1);
-    const kinds: ZoneKind[] = [
-      ...Array<ZoneKind>(safeCount).fill('safe'),
-      ...Array<ZoneKind>(hostileCount).fill('hostile'),
-    ];
+    this.hitsNeeded = Math.max(1, Math.round(this.num('hitsNeeded', 4)));
+    this.speed = this.num('speed', 0.65);
+    this.accelPerRow = this.num('accelPerRow', 0);
+    this.maxMisses = Math.max(1, rowCount - this.hitsNeeded + 1);
 
-    this.zones = this.rng
-      .shuffle(kinds)
-      .map((kind, index) => {
-        const width = kind === 'safe' ? safeWidth : hostileWidth;
-        const center = slot * (index + 1) + this.rng.float(-slot * 0.25, slot * 0.25);
-        return {
-          id: `z${index}`,
-          kind,
-          start: Math.max(0.02, center - width / 2),
-          end: Math.min(0.98, center + width / 2),
-          hit: false,
-        };
-      })
-      .sort((a, b) => a.start - b.start);
+    this.rows = Array.from({ length: rowCount }, (_, i): ZoneRow => {
+      const center = this.rng.float(half, 1 - half);
+      return {
+        id: `row${i}`,
+        zoneStart: center - half,
+        zoneEnd: center + half,
+        outcome: 'pending',
+        direction: 1,
+        reverseAt: reverseOnce ? this.rng.float(0.25, 0.75) : undefined,
+        reversed: false,
+      };
+    });
 
-    this.nextTargetIndex = this.zones.findIndex((z) => z.kind === 'safe');
+    this.activeRowIndex = 0;
     this.bar = 0;
+    this.hits = 0;
+    this.misses = 0;
+    this.lastResolvedIndex = null;
+    this.flash = 0;
+    this.errorFlash = 0;
+    this.chainTo = undefined;
   }
 
   protected onTick(ctx: TickContext): void {
     this.flash = Math.max(0, this.flash - ctx.dt);
+    this.errorFlash = Math.max(0, this.errorFlash - ctx.dt);
 
-    const speed = this.num('speed', 0.35) / 1000; // fração da trilha por ms
-    this.bar += speed * ctx.dt;
+    const row = this.rows[this.activeRowIndex];
+    if (!row) return;
 
-    const target = this.zones[this.nextTargetIndex];
-    if (target && this.bar > target.end) {
-      // A barra passou por uma zona verde sem bloqueio: falha de contenção.
-      this.damage(this.num('missPenalty', 0.5), 'Zona segura ultrapassada sem bloqueio');
-      this.advanceTarget();
+    const effectiveSpeed = this.speed * (1 + this.accelPerRow * this.bar);
+    this.bar += (row.direction * effectiveSpeed * ctx.dt) / 1000;
+
+    if (row.reverseAt !== undefined && !row.reversed) {
+      const crossed = row.direction > 0 ? this.bar >= row.reverseAt : this.bar <= row.reverseAt;
+      if (crossed) {
+        row.direction = row.direction > 0 ? -1 : 1;
+        row.reversed = true;
+      }
     }
 
-    if (this.bar >= 1) {
-      const pending = this.zones.some((z) => z.kind === 'safe' && !z.hit);
-      if (pending) this.resolve('breached', 'Varredura encerrada com zonas abertas');
-      else this.resolve('blocked');
+    if (this.bar >= 1 || this.bar <= 0) {
+      this.bar = Math.min(1, Math.max(0, this.bar));
+      const rowIndex = this.activeRowIndex;
+      this.registerMiss(row, rowIndex, 'Linha varrida sem acionamento');
+      if (!this.isOver()) this.advanceRow();
     }
   }
 
@@ -94,43 +127,81 @@ export class ZonewallController extends MinigameController<ZonewallState> {
     const isAction = input.type === 'pointer' || input.code === 'Space' || input.code === 'Enter';
     if (!isAction) return;
 
-    const zone = this.zones.find((z) => this.bar >= z.start && this.bar <= z.end);
+    const rowIndex = this.activeRowIndex;
+    const row = this.rows[rowIndex];
+    if (!row) return;
 
-    if (!zone) {
-      this.damage(this.num('missPenalty', 0.5), 'Acionamento fora de zona');
-      return;
-    }
-    if (zone.kind === 'hostile') {
-      this.resolve('breached', 'Acionamento em zona hostil');
-      return;
-    }
-    if (zone.hit) return;
+    const inZone = this.bar >= row.zoneStart && this.bar <= row.zoneEnd;
+    if (inZone) this.registerHit(row, rowIndex);
+    else this.registerMiss(row, rowIndex, 'Acionamento fora da zona-alvo');
 
-    zone.hit = true;
-    this.flash = 180;
-    // Quanto mais perto do centro da zona, maior a pontuação.
-    const center = (zone.start + zone.end) / 2;
-    const accuracy = 1 - Math.abs(this.bar - center) / ((zone.end - zone.start) / 2);
-    this.reward(100 + Math.round(accuracy * 100));
-    this.advanceTarget();
-
-    if (this.zones.every((z) => z.kind !== 'safe' || z.hit)) {
-      this.resolve('blocked'); // Insta Hack Block
-    }
+    if (!this.isOver()) this.advanceRow();
   }
 
   getState(): ZonewallState {
-    return { bar: this.bar, zones: this.zones, nextTargetIndex: this.nextTargetIndex, flash: this.flash };
+    return {
+      rows: this.rows,
+      activeRowIndex: this.activeRowIndex,
+      bar: this.bar,
+      hits: this.hits,
+      misses: this.misses,
+      hitsNeeded: this.hitsNeeded,
+      lastResolvedIndex: this.lastResolvedIndex,
+      flash: this.flash,
+      errorFlash: this.errorFlash,
+    };
   }
 
   getProgress(): number {
-    const safe = this.zones.filter((z) => z.kind === 'safe');
-    if (safe.length === 0) return 0;
-    return safe.filter((z) => z.hit).length / safe.length;
+    return this.hitsNeeded === 0 ? 0 : Math.min(1, this.hits / this.hitsNeeded);
   }
 
-  private advanceTarget(): void {
-    const next = this.zones.findIndex((z, i) => i > this.nextTargetIndex && z.kind === 'safe' && !z.hit);
-    this.nextTargetIndex = next;
+  result(): RunResult {
+    const base = super.result();
+    return this.chainTo ? { ...base, chainTo: this.chainTo } : base;
+  }
+
+  /** Sorteia o encadeamento a partir do chainPool assim que uma invasão é decidida. */
+  protected resolve(outcome: Outcome, reason?: string): void {
+    if (this.isOver()) return;
+    super.resolve(outcome, reason);
+    if (outcome === 'breached') {
+      const pool = this.config.chainPool;
+      if (pool && pool.length > 0) this.chainTo = this.rng.pick(pool);
+    }
+  }
+
+  private registerHit(row: ZoneRow, rowIndex: number): void {
+    row.outcome = 'hit';
+    this.hits += 1;
+    this.lastResolvedIndex = rowIndex;
+    this.flash = 180;
+
+    const half = (row.zoneEnd - row.zoneStart) / 2;
+    const center = row.zoneStart + half;
+    const accuracy = half > 0 ? 1 - Math.abs(this.bar - center) / half : 1;
+    this.reward(100 + Math.round(Math.max(0, accuracy) * 100));
+
+    if (this.hits >= this.hitsNeeded) this.resolve('blocked');
+  }
+
+  private registerMiss(row: ZoneRow, rowIndex: number, reason: string): void {
+    row.outcome = 'miss';
+    this.misses += 1;
+    this.lastResolvedIndex = rowIndex;
+    this.errorFlash = 260;
+    this.damage(1 / this.maxMisses, reason);
+  }
+
+  private advanceRow(): void {
+    this.activeRowIndex += 1;
+    this.bar = 0;
+    if (this.activeRowIndex >= this.rows.length && !this.isOver()) {
+      this.resolve(this.hits >= this.hitsNeeded ? 'blocked' : 'breached');
+    }
+  }
+
+  private flag(key: string): boolean {
+    return this.config.difficulty[key] === true;
   }
 }

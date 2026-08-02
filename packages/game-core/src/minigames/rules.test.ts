@@ -50,36 +50,118 @@ test('nodeH3X3R aceita passo adjacente que alterna Alfa/Beta', () => {
   assert.deepEqual(game.getState().path, [startId, neighbour.id]);
 });
 
-test('Zonewall derruba a conexão ao acionar em zona hostil', () => {
+/** Posição da barra garantidamente fora da zona-alvo da linha, com boa margem. */
+const outsideZone = (row: { zoneStart: number; zoneEnd: number }) =>
+  (row.zoneStart + row.zoneEnd) / 2 < 0.5 ? 1 : 0;
+
+test('Zonewall conta hit e avança a linha ao acionar dentro da zona-alvo', () => {
   const game = new ZonewallController({
     seed: 3,
     level: 3,
-    difficulty: { safeZones: 2, hostileZones: 2, speed: 0 },
+    difficulty: { rows: 3, hitsNeeded: 3, zoneWidth: 0.2, speed: 0 },
   });
   game.start();
   skipArming(game);
 
-  const hostile = game.getState().zones.find((z) => z.kind === 'hostile')!;
-  // Posiciona a barra dentro da zona vermelha sem depender do tempo.
-  (game as unknown as { bar: number }).bar = (hostile.start + hostile.end) / 2;
+  const row = game.getState().rows[0]!;
+  (game as unknown as { bar: number }).bar = (row.zoneStart + row.zoneEnd) / 2;
   game.handleInput({ type: 'key', code: 'Space', at: 0 });
 
+  const state = game.getState();
+  assert.equal(state.rows[0]!.outcome, 'hit');
+  assert.equal(state.activeRowIndex, 1, 'acerto também avança para a próxima linha');
+  assert.equal(state.hits, 1);
+});
+
+test('Zonewall conta miss e avança a linha ao acionar fora da zona-alvo', () => {
+  const game = new ZonewallController({
+    seed: 5,
+    level: 3,
+    difficulty: { rows: 4, hitsNeeded: 1, zoneWidth: 0.05, speed: 0 },
+  });
+  game.start();
+  skipArming(game);
+
+  const row = game.getState().rows[0]!;
+  (game as unknown as { bar: number }).bar = outsideZone(row);
+  game.handleInput({ type: 'key', code: 'Space', at: 0 });
+
+  const state = game.getState();
+  assert.equal(state.rows[0]!.outcome, 'miss');
+  assert.equal(state.activeRowIndex, 1, 'erro também avança para a próxima linha');
+  assert.equal(state.misses, 1);
+});
+
+test('Zonewall resolve como breached ao atingir o limite de erros', () => {
+  const game = new ZonewallController({
+    seed: 11,
+    level: 3,
+    difficulty: { rows: 4, hitsNeeded: 3, zoneWidth: 0.05, speed: 0 },
+  });
+  game.start();
+  skipArming(game);
+
+  // maxMisses = rows - hitsNeeded + 1 = 2: dois erros já inviabilizam o bloqueio.
+  for (let i = 0; i < 2; i++) {
+    const row = game.getState().rows[game.getState().activeRowIndex]!;
+    (game as unknown as { bar: number }).bar = outsideZone(row);
+    game.handleInput({ type: 'key', code: 'Space', at: 0 });
+  }
+
   assert.equal(game.result().outcome, 'breached');
+});
+
+test('Zonewall resolve como blocked ao atingir os acertos necessários antes de terminar as linhas', () => {
+  const game = new ZonewallController({
+    seed: 21,
+    level: 3,
+    difficulty: { rows: 5, hitsNeeded: 2, zoneWidth: 0.2, speed: 0 },
+  });
+  game.start();
+  skipArming(game);
+
+  for (let i = 0; i < 2; i++) {
+    const row = game.getState().rows[game.getState().activeRowIndex]!;
+    (game as unknown as { bar: number }).bar = (row.zoneStart + row.zoneEnd) / 2;
+    game.handleInput({ type: 'key', code: 'Space', at: 0 });
+  }
+
+  assert.equal(game.result().outcome, 'blocked');
+  assert.equal(game.getState().activeRowIndex, 1, 'insta hack block não deve esperar as linhas restantes');
+});
+
+test('Zonewall inclui chainTo no resultado quando o chainPool é fornecido e o hack é invadido', () => {
+  const game = new ZonewallController({
+    seed: 13,
+    level: 3,
+    difficulty: { rows: 1, hitsNeeded: 1, zoneWidth: 0.1, speed: 0 },
+    chainPool: ['memdefrager', 'nodehexer'],
+  });
+  game.start();
+  skipArming(game);
+
+  const row = game.getState().rows[0]!;
+  (game as unknown as { bar: number }).bar = outsideZone(row);
+  game.handleInput({ type: 'key', code: 'Space', at: 0 });
+
+  const result = game.result();
+  assert.equal(result.outcome, 'breached');
+  assert.ok(result.chainTo === 'memdefrager' || result.chainTo === 'nodehexer');
 });
 
 test('arming descarta input e mantém a fase até a contagem regressiva zerar', () => {
   const game = new ZonewallController({
     seed: 9,
     level: 3,
-    difficulty: { safeZones: 2, hostileZones: 2, speed: 0 },
+    difficulty: { rows: 1, hitsNeeded: 1, zoneWidth: 0.1, speed: 0 },
   });
   game.start();
 
   assert.equal(game.snapshot().phase, 'arming');
   assert.equal(game.snapshot().armingMsLeft, ARMING_MS);
 
-  const hostile = game.getState().zones.find((z) => z.kind === 'hostile')!;
-  (game as unknown as { bar: number }).bar = (hostile.start + hostile.end) / 2;
+  const row = game.getState().rows[0]!;
+  (game as unknown as { bar: number }).bar = outsideZone(row);
   game.handleInput({ type: 'key', code: 'Space', at: 0 });
   assert.equal(game.snapshot().phase, 'arming', 'input durante arming não deve ter efeito');
   assert.equal(game.isOver(), false, 'a run não deve resolver durante arming');
