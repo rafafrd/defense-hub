@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id        String              @id @default(uuid())
+  handle    String              @unique
+  createdAt DateTime            @default(now())
+  runs      Run[]
+  settings  DifficultySetting[]
+}
+
+model Run {
+  id         String   @id @default(uuid())
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileId  String
+  minigameId String
+  mode       String // solo | survival
+  outcome    String // blocked | breached
+  score      Int
+  durationMs Int
+  seed       BigInt
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([profileId, minigameId, createdAt])
+}
+
+/// Override de dificuldade por perfil e minigame; os defaults vivem no registry
+/// do game-core e só o que muda é persistido aqui.
+model DifficultySetting {
+  id         String   @id @default(uuid())
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileId  String
+  minigameId String
+  params     Json
+  updatedAt  DateTime @updatedAt
+
+  @@unique([profileId, minigameId])
+}

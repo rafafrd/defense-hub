@@ -1,0 +1,12 @@
+{
+  "name": "defensive-hub",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev:web": "npm run dev -w @hub/web",
+    "dev:api": "npm run dev -w @hub/api",
+    "build": "npm run build -w @hub/game-core && npm run build -w @hub/web && npm run build -w @hub/api",
+    "test": "npm run test -w @hub/game-core"
+  }
+}
