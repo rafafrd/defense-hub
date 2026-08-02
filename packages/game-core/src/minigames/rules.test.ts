@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ARMING_MS } from '../engine/MinigameController.js';
+import { MemDefragerController } from './memdefrager/MemDefragerController.js';
 import { NodeHexerController } from './nodehexer/NodeHexerController.js';
 import { ZonewallController } from './zonewall/ZonewallController.js';
 
@@ -176,4 +177,77 @@ test('arming descarta input e mantém a fase até a contagem regressiva zerar', 
 
   game.handleInput({ type: 'key', code: 'Space', at: 0 });
   assert.equal(game.result().outcome, 'breached', 'depois de armado o input volta a valer');
+});
+
+/** Força a fase 'input' sem depender do tempo de exibição — o alvo é a regra, não o timer. */
+const forceInputStage = (game: unknown) => {
+  (game as { stage: string }).stage = 'input';
+};
+
+const sequenceOf = (game: unknown): string[] => (game as { sequence: string[] }).sequence;
+
+test('memD3FR4G3R conclui todas as rodadas com a sequência correta e resolve blocked', () => {
+  const game = new MemDefragerController({
+    seed: 4,
+    level: 3,
+    difficulty: { gridSize: 3, rounds: 2, roundLengths: '2,3', itemMs: 500, replays: 1, attempts: 2 },
+  });
+  game.start();
+  skipArming(game);
+
+  forceInputStage(game);
+  for (const id of sequenceOf(game)) game.handleInput(click(id));
+
+  assert.equal(game.getState().round, 2, 'conclui a rodada 1 e avança para a rodada 2');
+  assert.equal(game.isOver(), false);
+
+  // A rodada 2 já entra automaticamente em 'showing' — força 'input' de novo.
+  forceInputStage(game);
+  for (const id of sequenceOf(game)) game.handleInput(click(id));
+
+  assert.equal(game.result().outcome, 'blocked');
+});
+
+test('memD3FR4G3R zera a rodada e consome tentativa ao clicar errado', () => {
+  const game = new MemDefragerController({
+    seed: 6,
+    level: 3,
+    difficulty: { gridSize: 3, rounds: 1, roundLengths: '3', itemMs: 500, replays: 1, attempts: 2 },
+  });
+  game.start();
+  skipArming(game);
+  forceInputStage(game);
+
+  const sequence = sequenceOf(game);
+  const wrongId = game.getState().cells.map((c) => c.id).find((id) => id !== sequence[1])!;
+
+  game.handleInput(click(sequence[0])); // acerto
+  game.handleInput(click(wrongId)); // erro
+
+  const state = game.getState();
+  assert.equal(state.entered.length, 0, 'o erro zera o progresso só da rodada atual');
+  assert.equal(state.attemptsLeft, 1, 'o erro consome uma tentativa do hack');
+  assert.equal(game.isOver(), false, 'ainda resta 1 tentativa — a run inteira não zera');
+});
+
+test('memD3FR4G3R replay consome contador e é recusado quando zerado', () => {
+  const game = new MemDefragerController({
+    seed: 8,
+    level: 3,
+    difficulty: { gridSize: 3, rounds: 1, roundLengths: '3', itemMs: 500, replays: 1, attempts: 2 },
+  });
+  game.start();
+  skipArming(game);
+  forceInputStage(game);
+
+  assert.equal(game.getState().replaysLeft, 1);
+
+  game.handleInput(click('central'));
+  assert.equal(game.getState().replaysLeft, 0, 'reprisar consome o contador');
+  assert.equal(game.getState().stage, 'showing', 'reprisar volta para a exibição');
+
+  forceInputStage(game);
+  game.handleInput(click('central'));
+  assert.equal(game.getState().replaysLeft, 0, 'sem replays restantes, o contador não fica negativo');
+  assert.equal(game.getState().stage, 'input', 'sem replays restantes, o clique não reexibe a sequência');
 });
