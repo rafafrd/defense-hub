@@ -11,6 +11,12 @@ export type { ZonewallState, ZoneRow, RowOutcome } from './minigames/zonewall/Zo
 export { MemDefragerController } from './minigames/memdefrager/MemDefragerController.js';
 export type { MemDefragerState, MemCell } from './minigames/memdefrager/MemDefragerController.js';
 export { NodeHexerController } from './minigames/nodehexer/NodeHexerController.js';
-export type { NodeHexerState, HexNode, NodeKind } from './minigames/nodehexer/NodeHexerController.js';
+export type { NodeHexerState, HexNode, NodeKind, VerifyFailure } from './minigames/nodehexer/NodeHexerController.js';
+export { KernelCompilerController } from './minigames/kernelcompiler/KernelCompilerController.js';
+export type { KernelCompilerState, CodeBlock, CodeLine } from './minigames/kernelcompiler/KernelCompilerController.js';
+export { ShiftSeqController } from './minigames/shiftseq/ShiftSeqController.js';
+export type { ShiftSeqState, InfectedNode, TravelingAttack } from './minigames/shiftseq/ShiftSeqController.js';
+export { StackPusherController } from './minigames/stackpusher/StackPusherController.js';
+export type { StackPusherState, StackNode, SkullNode, Selection } from './minigames/stackpusher/StackPusherController.js';
 export { PendingController } from './minigames/pending.js';
 export type { PendingState } from './minigames/pending.js';

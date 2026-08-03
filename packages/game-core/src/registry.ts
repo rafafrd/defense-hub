@@ -5,10 +5,10 @@ import { resolveDifficulty } from './engine/difficulty.js';
 import { ZonewallController } from './minigames/zonewall/ZonewallController.js';
 import { MemDefragerController } from './minigames/memdefrager/MemDefragerController.js';
 import { NodeHexerController } from './minigames/nodehexer/NodeHexerController.js';
-import { createKernelCompiler } from './minigames/kernelcompiler/spec.js';
+import { KernelCompilerController } from './minigames/kernelcompiler/KernelCompilerController.js';
 import { createMemDeallocater } from './minigames/memdeallocater/spec.js';
-import { createShiftSeq } from './minigames/shiftseq/spec.js';
-import { createStackPusher } from './minigames/stackpusher/spec.js';
+import { ShiftSeqController } from './minigames/shiftseq/ShiftSeqController.js';
+import { StackPusherController } from './minigames/stackpusher/StackPusherController.js';
 import { createTokenine } from './minigames/tokenine/spec.js';
 
 export interface MinigameEntry {
@@ -110,32 +110,49 @@ export const MINIGAMES: readonly MinigameEntry[] = [
     label: 'nodeH3X3R',
     group: 'WTTG2',
     renderer: 'dom',
-    brief: 'Ligue todos os nós alvo alternando Alfa e Beta a cada passo.',
-    controls: 'Clique',
+    brief: 'Trace livremente e só depois verifique: alternância, continuidade e alvos cobertos.',
+    controls: 'Clique · Enter para verificar',
     implemented: true,
     levels: {
-      1: { width: 4, height: 4, targets: 2, timeLimitMs: 0, breakPenalty: 0.12 },
-      2: { width: 5, height: 4, targets: 3, timeLimitMs: 60_000, breakPenalty: 0.18 },
-      3: { width: 5, height: 5, targets: 4, timeLimitMs: 45_000, breakPenalty: 0.25 },
-      4: { width: 6, height: 6, targets: 6, timeLimitMs: 30_000, breakPenalty: 0.35 },
-      5: { width: 7, height: 7, targets: 9, timeLimitMs: 20_000, breakPenalty: 0.5 },
+      1: {
+        widthMin: 4, widthMax: 5, heightMin: 4, heightMax: 5, targets: 3,
+        timeBaseMs: 60_000, bonusPerTargetMs: 6_000, breakPenalty: 0.12, deadNodes: 0,
+      },
+      2: {
+        widthMin: 5, widthMax: 6, heightMin: 5, heightMax: 6, targets: 4,
+        timeBaseMs: 50_000, bonusPerTargetMs: 5_000, breakPenalty: 0.18, deadNodes: 0,
+      },
+      3: {
+        widthMin: 6, widthMax: 7, heightMin: 6, heightMax: 7, targets: 5,
+        timeBaseMs: 42_000, bonusPerTargetMs: 4_000, breakPenalty: 0.25, deadNodes: 0,
+      },
+      4: {
+        widthMin: 7, widthMax: 8, heightMin: 7, heightMax: 8, targets: 6,
+        timeBaseMs: 34_000, bonusPerTargetMs: 3_000, breakPenalty: 0.35, deadNodes: 4,
+      },
+      5: {
+        widthMin: 8, widthMax: 9, heightMin: 8, heightMax: 9, targets: 8,
+        timeBaseMs: 26_000, bonusPerTargetMs: 2_000, breakPenalty: 0.5, deadNodes: 6, hardCollapse: true,
+      },
     },
-    objective: 'Trace um caminho ligando todos os nós alvo, alternando Alfa e Beta a cada passo.',
+    objective: 'Trace uma rota cobrindo todos os nós corrompidos e verifique antes que o tempo acabe.',
     howTo: [
-      'Comece no nó inicial (destacado).',
-      'Clique num nó vizinho de tipo diferente do atual — Alfa liga só com Beta e vice-versa.',
-      'Colete todos os nós marcados como alvo.',
+      'Comece no nó inicial (destacado) e clique nós vizinhos para estender a rota.',
+      'Ligar dois nós do mesmo tipo não falha na hora — só a verificação cobra a alternância Alfa/Beta.',
+      'Clique em "verificar rota" (ou Enter) quando achar que cobriu todos os nós corrompidos.',
       'Clique no nó anterior do caminho para desfazer um passo sem penalidade.',
+      'Alcançar um nó corrompido soma tempo extra ao cronômetro.',
     ],
     failsWhen: [
-      'Você liga dois nós do mesmo tipo — a conexão quebra e o caminho volta ao início.',
-      'Você tenta pular para um nó não adjacente.',
+      'A verificação encontra uma ligação entre nós do mesmo tipo, um salto descontínuo ou um alvo não coberto.',
       'O tempo do traçado se esgota.',
+      'A partir do nível 5, uma única verificação reprovada já derruba a rota traçada.',
     ],
     legend: [
       { symbol: '■ Alfa', meaning: 'nó quadrado' },
       { symbol: '● Beta', meaning: 'nó circular' },
-      { symbol: '◈', meaning: 'nó alvo' },
+      { symbol: '◈', meaning: 'nó corrompido (alvo)' },
+      { symbol: '✕ opaco', meaning: 'nó morto — não pode entrar na rota (níveis 4-5)' },
     ],
     create: (config) => new NodeHexerController(config),
   },
@@ -144,30 +161,34 @@ export const MINIGAMES: readonly MinigameEntry[] = [
     label: 'K3RN3LC0MP1L3R',
     group: 'WTTG3',
     renderer: 'dom',
-    brief: 'Digite as linhas corrompidas; typo só sai no Backspace.',
+    brief: 'Digite exatamente a linha destacada e submeta com Enter; typo só sai no Backspace.',
     controls: 'Teclado, Backspace, Enter',
-    implemented: false,
+    implemented: true,
     levels: {
-      1: { lines: 2, lineLength: 16 },
-      2: { lines: 3, lineLength: 22 },
-      3: { lines: 4, lineLength: 28 },
-      4: { lines: 6, lineLength: 38 },
-      5: { lines: 9, lineLength: 52 },
+      1: { blocks: 1, linesPerBlock: 3, lineLength: 18, timeLimitMs: 0 },
+      2: { blocks: 1, linesPerBlock: 4, lineLength: 26, timeLimitMs: 90_000 },
+      3: { blocks: 2, linesPerBlock: 4, lineLength: 34, timeLimitMs: 75_000 },
+      4: { blocks: 3, linesPerBlock: 5, lineLength: 44, timeLimitMs: 70_000, errorPenaltyMs: 2_000 },
+      5: { blocks: 4, linesPerBlock: 6, lineLength: 60, timeLimitMs: 60_000, errorPenaltyMs: 2_000 },
     },
-    objective: 'Digite corretamente todas as linhas de código corrompido antes de zerar o contador.',
+    objective: 'Digite corretamente todas as linhas de todos os blocos de memória corrompida antes que o tempo acabe.',
     howTo: [
-      'Leia a linha corrompida exibida.',
-      'Digite os caracteres na ordem exata.',
-      'Se errar, aperte Backspace até apagar o caractere errado.',
+      'Leia a linha destacada e digite os caracteres na ordem exata, incluindo espaços.',
       'Aperte Enter para submeter a linha completa.',
+      'Se errar, o caractere aparece em vermelho — só Backspace resolve, nada mais avança.',
+      'Complete todas as linhas de todos os blocos para bloquear o ataque.',
     ],
     failsWhen: [
-      'Você tenta avançar com um erro não corrigido na linha atual.',
+      'Você submete a linha com um erro não corrigido ou incompleta — pequena penalidade, tenta de novo.',
+      'O tempo se esgota.',
+      'A partir do nível 4, cada typo também desconta tempo do cronômetro.',
     ],
     legend: [
       { symbol: 'vermelho', meaning: 'caractere digitado errado' },
+      { symbol: 'verde', meaning: 'caractere já confirmado' },
+      { symbol: '·', meaning: 'espaço — precisa ser digitado também' },
     ],
-    create: createKernelCompiler,
+    create: (config) => new KernelCompilerController(config),
   },
   {
     id: 'memdeallocater',
@@ -205,65 +226,99 @@ export const MINIGAMES: readonly MinigameEntry[] = [
     label: 'shiftSEQ',
     group: 'WTTG3',
     renderer: 'canvas',
-    brief: 'Destrua os nós infectados e recarregue a bateria no timing certo.',
+    brief: 'Destrua os nós infectados e recarregue a bateria no timing certo do pulso.',
     controls: 'WASD, Espaço',
-    implemented: false,
+    implemented: true,
     levels: {
-      1: { gridSize: 5, infectedNodes: 2, battery: 160 },
-      2: { gridSize: 6, infectedNodes: 2, battery: 130 },
-      3: { gridSize: 7, infectedNodes: 3, battery: 100 },
-      4: { gridSize: 8, infectedNodes: 5, battery: 70 },
-      5: { gridSize: 9, infectedNodes: 8, battery: 45 },
+      1: {
+        gridSize: 5, infectedNodes: 2, nodeHealth: 4, attackIntervalMs: 3_200,
+        homeDamagePercent: 0.08, batteryMax: 100, hitCost: 6, rechargeWindowMs: 300, lockoutMs: 1_200,
+      },
+      2: {
+        gridSize: 6, infectedNodes: 3, nodeHealth: 5, attackIntervalMs: 2_500,
+        homeDamagePercent: 0.12, batteryMax: 100, hitCost: 7, rechargeWindowMs: 240, lockoutMs: 2_000,
+      },
+      3: {
+        gridSize: 7, infectedNodes: 4, nodeHealth: 6, attackIntervalMs: 1_800,
+        homeDamagePercent: 0.16, batteryMax: 90, hitCost: 8, rechargeWindowMs: 170, lockoutMs: 3_000,
+      },
+      4: {
+        gridSize: 8, infectedNodes: 5, nodeHealth: 8, attackIntervalMs: 1_300,
+        homeDamagePercent: 0.22, batteryMax: 80, hitCost: 9, rechargeWindowMs: 120, lockoutMs: 4_000,
+      },
+      5: {
+        gridSize: 9, infectedNodes: 6, nodeHealth: 10, attackIntervalMs: 900,
+        homeDamagePercent: 0.30, batteryMax: 70, hitCost: 10, rechargeWindowMs: 85, lockoutMs: 5_000,
+      },
     },
-    objective: 'Destrua os nós infectados e proteja o Home Node sem esgotar a bateria.',
+    objective: 'Destrua todos os nós infectados antes que um ataque atinja o Home Node com você fora dele.',
     howTo: [
-      'Mova-se pela grade com WASD.',
-      'Pise num nó infectado e martele Espaço para destruí-lo.',
-      'Volte ao Home Node quando a bateria estiver baixa.',
-      'No Home Node, aperte Espaço no instante em que o anel pulsante alinha com a borda para recarregar.',
+      'Mova-se pela grade com WASD a partir do Home Node.',
+      'Pise num nó infectado para suprimir os disparos dele e martele Espaço para desgastar a vida até destruí-lo.',
+      'Cada golpe consome bateria — volte ao Home Node antes que ela acabe.',
+      'No Home Node, aperte Espaço no instante em que o anel pulsante alinha com o contorno-alvo para recarregar tudo.',
+      'Errar o timing da recarga trava o Home Node por um tempo — planeje a volta com folga.',
     ],
     failsWhen: [
-      'Os nós infectados destroem o Home Node antes de serem eliminados.',
-      'A bateria chega a zero longe do Home Node.',
+      'Um ataque chega ao Home Node enquanto você está fora dele — essa é a única forma de perder.',
     ],
     legend: [
-      { symbol: '◆ vermelho', meaning: 'nó infectado' },
+      { symbol: '◆ vermelho', meaning: 'nó infectado (vida desenhada em cima)' },
       { symbol: '■ âmbar', meaning: 'Home Node' },
+      { symbol: '● viajando', meaning: 'ataque em trânsito rumo ao Home Node' },
+      { symbol: 'anel pulsante', meaning: 'janela de recarga — acerte o contorno-alvo' },
     ],
-    create: createShiftSeq,
+    create: (config) => new ShiftSeqController(config),
   },
   {
     id: 'stackpusher',
     label: 'stackPUSHER',
     group: 'WTTG3',
     renderer: 'dom',
-    brief: 'Empurre cada Stack até o nó Delete sem tocar nas Caveiras.',
+    brief: 'Reposicione o Pusher para carregar cada Stack, célula a célula, até o nó Delete.',
     controls: 'Clique',
-    implemented: false,
+    implemented: true,
     levels: {
-      1: { gridSize: 6, stacks: 2, skulls: 2 },
-      2: { gridSize: 7, stacks: 2, skulls: 4 },
-      3: { gridSize: 8, stacks: 3, skulls: 5 },
-      4: { gridSize: 9, stacks: 4, skulls: 8 },
-      5: { gridSize: 10, stacks: 5, skulls: 12 },
+      1: {
+        gridSizeMin: 5, gridSizeMax: 6, stacks: 2, skulls: 0,
+        timeLimitMs: 0, moveLimit: 0, skullsHidden: false,
+      },
+      2: {
+        gridSizeMin: 6, gridSizeMax: 7, stacks: 3, skulls: 2,
+        timeLimitMs: 0, moveLimit: 0, skullsHidden: false,
+      },
+      3: {
+        gridSizeMin: 7, gridSizeMax: 8, stacks: 4, skulls: 4,
+        timeLimitMs: 120_000, moveLimit: 0, skullsHidden: false,
+      },
+      4: {
+        gridSizeMin: 8, gridSizeMax: 9, stacks: 5, skulls: 7,
+        timeLimitMs: 100_000, moveLimit: 0, skullsHidden: true,
+      },
+      5: {
+        gridSizeMin: 9, gridSizeMax: 10, stacks: 6, skulls: 10,
+        timeLimitMs: 80_000, moveLimit: 40, skullsHidden: true,
+      },
     },
     objective: 'Empurre todos os nós Stack até o nó Delete sem tocar nas caveiras.',
     howTo: [
-      'Posicione o Pusher ao lado do Stack que quer mover.',
-      'Clique no Stack para empurrá-lo na direção oposta ao Pusher.',
-      'O Stack só se move dentro do raio 3x3 ao redor do Pusher.',
-      'Repita até levar todos os Stacks ao nó Delete.',
+      'Clique no Pusher para pegá-lo e clique numa casa livre para soltá-lo ali — em qualquer lugar do tabuleiro.',
+      'Clique num Stack dentro do raio 3x3 do Pusher para selecioná-lo.',
+      'Clique numa casa livre, também dentro desse raio 3x3, para movê-lo até lá.',
+      'Reposicione o Pusher e repita até levar todos os Stacks ao nó Delete.',
     ],
     failsWhen: [
-      'O Pusher ou um Stack para sobre uma Caveira.',
+      'Você clica numa caveira, ou solta o Pusher ou um Stack sobre uma.',
+      'A partir do nível 3, o tempo se esgota.',
+      'No nível 5, você excede o limite de 40 movimentos.',
     ],
     legend: [
       { symbol: '▲', meaning: 'Pusher' },
       { symbol: '■', meaning: 'Stack' },
-      { symbol: '☠', meaning: 'Caveira — evite' },
+      { symbol: '☠', meaning: 'Caveira — evite (oculta até ficar adjacente ao Pusher a partir do nível 4)' },
       { symbol: '▽', meaning: 'nó Delete — destino' },
     ],
-    create: createStackPusher,
+    create: (config) => new StackPusherController(config),
   },
   {
     id: 'tokenine',
